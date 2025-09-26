@@ -1,0 +1,166 @@
+---
+title: "Lab02 - Python"
+author: "Luis Felipe Godoy"
+format: html
+editor: visual
+---
+
+```{r}
+library(reticulate)
+use_python("C:/Python312/python.exe", required = TRUE)
+py_run_string("import pandas as pd; import numpy as np; import matplotlib.pyplot as plt; print('Python OK')")
+```
+
+```{python}
+# Importação da biblioteca pandas para manipulação de DataFrames
+import pandas as pd
+# Importação da biblioteca numpy para manipulação de arrays e NaNs
+import numpy as np
+# Importação da biblioteca matplotlib.pyplot para plotagem de gráficos
+import matplotlib.pyplot as plt
+# Importação de LinearSegmentedColormap para criar gradiente de cores personalizado
+from matplotlib.colors import LinearSegmentedColormap
+# Importação da biblioteca datetime para manipulação de datas
+import datetime as dt
+# Importação da biblioteca calendar para informações sobre calendário e dias do mês
+import calendar
+
+# =============================================
+# Função que processa cada chunk do CSV
+# =============================================
+def process_chunk(df):
+    """
+    Recebe um chunk do CSV e retorna DataFrame com:
+    dia, mês, cia aérea, total de voos e voos atrasados
+    """
+    # Filtrar apenas as companhias de interesse
+    df = df[df['AIRLINE'].isin(['AA','DL','UA','US'])]
+    
+    # Remover linhas com valores ausentes na coluna ARRIVAL_DELAY
+    df = df.dropna(subset=['ARRIVAL_DELAY'])
+    
+    # Agrupar por companhia, ano, mês e dia
+    # Calcular o total de voos e o número de voos atrasados (>10 min)
+    stats = df.groupby(['AIRLINE', 'YEAR', 'MONTH', 'DAY']).agg(
+        total_voos=('ARRIVAL_DELAY','count'),  # Conta todos os voos do grupo
+        voos_atrasados=('ARRIVAL_DELAY', lambda x: (x>10).sum())  # Conta voos com atraso >10
+    ).reset_index()  # Resetar índice para ter colunas normais
+    
+    # Retornar DataFrame com estatísticas do chunk
+    return stats
+
+# Definir tamanho do chunk para leitura parcial do CSV
+chunk_size = 100_000
+# Lista para armazenar resultados de cada chunk
+stats_list = []
+
+# Caminho do arquivo CSV (ajustar se necessário)
+file_path = "flights.csv"
+
+# Selecionar apenas as colunas de interesse para otimizar a leitura
+usecols = ['YEAR','MONTH','DAY','AIRLINE','ARRIVAL_DELAY']
+
+# Ler o CSV em chunks e processar cada um
+for chunk in pd.read_csv(file_path, usecols=usecols, chunksize=chunk_size):
+    # Processar o chunk usando a função definida
+    stats_chunk = process_chunk(chunk)
+    # Adicionar o resultado à lista de chunks
+    stats_list.append(stats_chunk)
+
+# Combinar todos os chunks processados em um único DataFrame
+stats = pd.concat(stats_list)
+
+# Agrupar novamente por companhia/ano/mês/dia para somar resultados repetidos
+stats_final = stats.groupby(['AIRLINE','YEAR','MONTH','DAY']).sum().reset_index()
+
+# Calcular o percentual de voos atrasados por dia/companhia
+stats_final['Perc'] = stats_final['voos_atrasados'] / stats_final['total_voos']
+
+# Criar coluna de data completa (datetime) para facilitar a manipulação e plotagem
+stats_final['Data'] = pd.to_datetime(stats_final[['YEAR','MONTH','DAY']])
+
+# =============================================
+# Função que cria a matriz mensal do calendário
+# =============================================
+def month_matrix(year, month, value_by_date):
+    # Obter a estrutura do mês em semanas (lista de semanas com dias)
+    weeks = calendar.monthcalendar(year, month)
+    # Criar matriz preenchida com NaN, tamanho: semanas x 7 dias
+    mat = np.full((len(weeks), 7), np.nan)
+    
+    # Preencher a matriz com valores de atraso do dicionário
+    for i, week in enumerate(weeks):  # Itera sobre cada semana
+        for j, day_num in enumerate(week):  # Itera sobre cada dia da semana
+            if day_num != 0:  # Ignora os zeros (dias fora do mês)
+                d = dt.date(year, month, day_num)  # Cria objeto date
+                mat[i,j] = value_by_date.get(d, np.nan)  # Atribui valor do dicionário ou NaN
+    # Retorna a matriz do mês pronta para plotagem
+    return mat
+
+# =============================================
+# Função que plota o calendário anual para uma companhia
+# =============================================
+def plot_calendar(df, airline_code):
+    # Criar um dicionário que mapeia datas para valores de percentual de atraso
+    val_map = {d.date(): v for d, v in zip(df['Data'], df['Perc'])}
+    
+    # Criar gradiente de cores azul → vermelho
+    cmap = LinearSegmentedColormap.from_list("blue_to_red", ["#4575b4", "#d73027"])
+    # Definir cor para valores ausentes (NaNs) como cinza claro
+    cmap.set_bad(color="#f0f0f0")
+    
+    # Criar figura com 4 linhas x 3 colunas (12 meses)
+    fig, axes = plt.subplots(4, 3, figsize=(24,22), gridspec_kw={'wspace':0.4,'hspace':1.2})
+    # Flatten dos eixos para iterar facilmente
+    axes = axes.ravel()
+    # Nomes dos meses abreviados
+    month_names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+    # Primeira letra dos dias da semana
+    weekdays = ["S","M","T","W","T","F","S"]
+    
+    # Loop para gerar o heatmap de cada mês
+    for m in range(1,13):
+        ax = axes[m-1]  # Seleciona o subplot correspondente
+        mat = month_matrix(2015, m, val_map)  # Gera a matriz do mês
+        # Plotar matriz como imagem colorida
+        im = ax.imshow(mat, aspect="equal", cmap=cmap, vmin=0, vmax=1)
+        # Adicionar título do mês
+        ax.set_title(month_names[m-1], fontsize=10, pad=5)
+        # Definir ticks do eixo x com dias da semana
+        ax.set_xticks(range(7))
+        ax.set_xticklabels(weekdays, fontsize=7)
+        # Remover ticks do eixo y
+        ax.set_yticks([])
+        # Criar linhas de grade para separar células
+        ax.set_xticks(np.arange(-.5, 7, 1), minor=True)
+        ax.set_yticks(np.arange(-.5, mat.shape[0], 1), minor=True)
+        ax.grid(which="minor", color="white", linewidth=1)
+        # Remover ticks visuais
+        ax.tick_params(which="both", bottom=False, left=False)
+    
+    # Remover eixos extras caso existam
+    for k in range(12, len(axes)):
+        fig.delaxes(axes[k])
+    
+    # Adicionar colorbar à direita da figura
+    cbar_ax = fig.add_axes([0.93, 0.15, 0.02, 0.7])
+    cbar = fig.colorbar(im, cax=cbar_ax)
+    cbar.set_label("Percentual de atrasos (>10 min)", fontsize=14)
+    
+    # Adicionar título principal da figura
+    fig.suptitle(f"Percentual de atrasos (>10min) — {airline_code} — 2015",
+                 fontsize=13, y=0.99)
+    
+    # Exibir o gráfico
+    plt.show()
+
+# =============================================
+# Loop para gerar calendário de cada companhia
+# =============================================
+for airline in ['AA','DL','UA','US']:
+    # Subconjunto do DataFrame apenas para a companhia atual
+    df_airline = stats_final[stats_final['AIRLINE']==airline]
+    # Plotar calendário anual
+    plot_calendar(df_airline, airline)
+
+```

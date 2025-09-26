@@ -1,0 +1,135 @@
+---
+title: "Desafio 06 - ME315"
+author: "Luis Felipe Godoy - RA:277197"
+format: html
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r}
+# -------------------------------
+# Lab 6 - Banco de Dados SQLite no R
+# -------------------------------
+
+# Carregar os pacotes necessários
+library(DBI)       # Interface genérica para bancos de dados
+library(RSQLite)   # Driver para conectar ao SQLite pelo DBI
+
+# Definir o caminho relativo da pasta onde está o banco de dados
+path <- "dados"    # Ajuste conforme a pasta que contém disco.db
+
+# Criar o caminho completo até o arquivo disco.db
+fname <- file.path(path, "disco.db")
+
+# Conectar ao banco de dados SQLite
+conn <- dbConnect(SQLite(), dbname = fname)
+
+# -------------------------------
+# Consultas básicas do Lab 6
+# -------------------------------
+
+# Listar todas as tabelas existentes no banco
+dbListTables(conn)
+
+# Listar os nomes de todas as colunas da tabela customers
+dbListFields(conn, "customers")
+
+# Contar o número total de clientes cadastrados
+dbGetQuery(conn, "SELECT COUNT(*) AS total_clientes FROM customers;")
+
+# Contar o número de países distintos onde há clientes
+dbGetQuery(conn, "SELECT COUNT(DISTINCT country) AS num_paises FROM customers;")
+
+# Contar quantos clientes existem por país, em ordem decrescente
+dbGetQuery(conn, "
+  SELECT country, COUNT(*) AS num_clientes
+  FROM customers
+  GROUP BY country
+  ORDER BY num_clientes DESC;
+")
+
+# Listar os 5 países com mais clientes cadastrados
+dbGetQuery(conn, "
+  SELECT country, COUNT(*) AS num_clientes
+  FROM customers
+  GROUP BY country
+  ORDER BY num_clientes DESC
+  LIMIT 5;
+")
+
+# Listar os países cujo nome tem exatamente 6 letras
+dbGetQuery(conn, "
+  SELECT DISTINCT country
+  FROM customers
+  WHERE LENGTH(country) = 6;
+")
+
+# Listar as músicas compradas por clientes brasileiros
+dbGetQuery(conn, "
+  SELECT DISTINCT t.Name AS musica
+  FROM invoices i
+  JOIN customers c ON i.CustomerId = c.CustomerId
+  JOIN invoice_items ii ON i.InvoiceId = ii.InvoiceId
+  JOIN tracks t ON ii.TrackId = t.TrackId
+  WHERE c.Country = 'Brazil';
+")
+
+# -------------------------------
+# Perguntas extras (valem nota)
+# -------------------------------
+
+# Álbum mais tocado por país
+dbGetQuery(conn, "
+  SELECT c.Country, a.Title AS album, COUNT(*) AS vezes_tocado
+  FROM customers c
+  JOIN invoices i ON c.CustomerId = i.CustomerId
+  JOIN invoice_items ii ON i.InvoiceId = ii.InvoiceId
+  JOIN tracks t ON ii.TrackId = t.TrackId
+  JOIN albums a ON t.AlbumId = a.AlbumId
+  GROUP BY c.Country, a.AlbumId
+  HAVING vezes_tocado = (
+    SELECT MAX(contagem)
+    FROM (
+      SELECT COUNT(*) AS contagem
+      FROM customers c2
+      JOIN invoices i2 ON c2.CustomerId = i2.CustomerId
+      JOIN invoice_items ii2 ON i2.InvoiceId = ii2.InvoiceId
+      JOIN tracks t2 ON ii2.TrackId = t2.TrackId
+      WHERE c2.Country = c.Country
+      GROUP BY t2.AlbumId
+    )
+  );
+")
+
+# Artista mais tocado por país
+dbGetQuery(conn, "
+  SELECT c.Country, ar.Name AS artista, COUNT(*) AS vezes_tocado
+  FROM customers c
+  JOIN invoices i ON c.CustomerId = i.CustomerId
+  JOIN invoice_items ii ON i.InvoiceId = ii.InvoiceId
+  JOIN tracks t ON ii.TrackId = t.TrackId
+  JOIN albums a ON t.AlbumId = a.AlbumId
+  JOIN artists ar ON a.ArtistId = ar.ArtistId
+  GROUP BY c.Country, ar.ArtistId
+  HAVING vezes_tocado = (
+    SELECT MAX(contagem)
+    FROM (
+      SELECT COUNT(*) AS contagem
+      FROM customers c2
+      JOIN invoices i2 ON c2.CustomerId = i2.CustomerId
+      JOIN invoice_items ii2 ON i2.InvoiceId = ii2.InvoiceId
+      JOIN tracks t2 ON ii2.TrackId = t2.TrackId
+      JOIN albums a2 ON t2.AlbumId = a2.AlbumId
+      WHERE c2.Country = c.Country
+      GROUP BY a2.ArtistId
+    )
+  );
+")
+
+# -------------------------------
+# Encerrar a conexão com o banco
+# -------------------------------
+dbDisconnect(conn)
+```

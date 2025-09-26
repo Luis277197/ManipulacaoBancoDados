@@ -1,0 +1,128 @@
+---
+title: Desafio 04 - ME315
+author: Gaspar Sanchez (238601) e Luis Felipe Godoy (277197)
+output:
+  html_document:
+    self_contained: true
+    theme: cerulean
+---
+Neste HTML usaremos como exemplo o tail_number N737JW:
+```{r, warning = FALSE, message=FALSE}
+# --- PARTE 1: BIBLIOTECAS NECESSÁRIAS ---
+library(htmlwidgets)  # Exportação de objetos interativos para HTML
+library(tidyverse)    # Manipulação e transformação de dados
+library(leaflet)      # Mapas interativos
+library(DT)           # Tabelas interativas
+library(readr)        # Leitura de dados
+
+# --- PARTE 2: LEITURA DO ARQUIVO DE AEROPORTOS ---
+# Usar caminho relativo para airports.csv
+airports <- read_csv("airports.csv")
+
+# --- PARTE 3: FUNÇÃO AUXILIAR ---
+# Converte hora no formato HHMM para string no formato HH:MM
+format_hora <- function(hora) {
+  if (is.na(hora)) return("NA")
+  hora <- as.integer(hora)
+  horas <- hora %/% 100
+  minutos <- hora %% 100
+  sprintf("%02d:%02d", horas, minutos)
+}
+
+# --- PARTE 4: FUNÇÃO PRINCIPAL ---
+analisa_aeronave <- function(tail_number, arquivo) {
+  
+  
+  # Ler dados de voos a partir do arquivo informado
+  flights <- read_csv(arquivo)
+  
+  # Filtrar voos da aeronave e ordenar cronologicamente
+  tabela_flights <- flights %>%
+    filter(TAIL_NUMBER == tail_number) %>%
+    arrange(YEAR, MONTH, DAY, DEPARTURE_TIME)
+  
+  # Caso não existam voos
+  if (nrow(tabela_flights) == 0) {
+    message("Nenhum voo encontrado para esta aeronave.")
+    return(NULL)
+  }
+  
+  # Juntar coordenadas dos aeroportos de origem e destino
+  tabela_trajetos <- tabela_flights %>%
+    left_join(airports, by = c("ORIGIN_AIRPORT" = "IATA_CODE")) %>%
+    rename(origin_lat = LATITUDE, origin_lon = LONGITUDE) %>%
+    left_join(airports, by = c("DESTINATION_AIRPORT" = "IATA_CODE")) %>%
+    rename(dest_lat = LATITUDE, dest_lon = LONGITUDE) %>%
+    mutate(
+      avg_speed = DISTANCE / (AIR_TIME / 60)  # Velocidade média em mph
+    )
+  
+  # Criar tabela interativa com DT
+  tabela_interativa <- datatable(
+    tabela_trajetos,
+    caption = paste("Trajetos da aeronave", tail_number),
+    options = list(pageLength = 5, scrollX = TRUE, autoWidth = TRUE)
+  )
+  
+  # Criar segmentos de voo para o mapa
+  segments <- lapply(1:nrow(tabela_trajetos), function(i) {
+    list(
+      lng = c(tabela_trajetos$origin_lon[i], tabela_trajetos$dest_lon[i]),
+      lat = c(tabela_trajetos$origin_lat[i], tabela_trajetos$dest_lat[i]),
+      weight = pmax(1, tabela_trajetos$avg_speed[i] / 50),  # espessura proporcional à velocidade
+      popup = paste0(
+        "Origem: ", tabela_trajetos$ORIGIN_AIRPORT[i], "<br>",
+        "Destino: ", tabela_trajetos$DESTINATION_AIRPORT[i], "<br>",
+        "Data: ", tabela_trajetos$YEAR[i], "-",
+        tabela_trajetos$MONTH[i], "-",
+        tabela_trajetos$DAY[i], "<br>",
+        "Partida: ", format_hora(tabela_trajetos$DEPARTURE_TIME[i]), "<br>",
+        "Chegada: ", format_hora(tabela_trajetos$ARRIVAL_TIME[i]), "<br>",
+        "Velocidade média: ", round(tabela_trajetos$avg_speed[i], 1), " mph"
+      )
+    )
+  })
+  
+  # Construir mapa interativo com Leaflet
+  mapa_leaflet <- leaflet() %>% addTiles()
+  
+  for (seg in segments) {
+    mapa_leaflet <- mapa_leaflet %>%
+      addPolylines(
+        lng = seg$lng, lat = seg$lat,
+        weight = seg$weight, color = "blue",
+        opacity = 0.6, popup = seg$popup
+      )
+  }
+  
+  mapa_leaflet <- mapa_leaflet %>%
+    addCircleMarkers(
+      lng = tabela_trajetos$origin_lon, lat = tabela_trajetos$origin_lat,
+      color = "red", radius = 3, popup = tabela_trajetos$ORIGIN_AIRPORT
+    ) %>%
+    addCircleMarkers(
+      lng = tabela_trajetos$dest_lon, lat = tabela_trajetos$dest_lat,
+      color = "green", radius = 3, popup = tabela_trajetos$DESTINATION_AIRPORT
+    )
+  
+  # Retornar lista com tabela e mapa
+  return(list(
+    tabela = tabela_interativa,
+    mapa = mapa_leaflet
+  ))
+}
+
+# --- PARTE 5: EXEMPLO DE USO ---
+resultado <- analisa_aeronave("N737JW", "flights.csv")
+```
+
+
+```{r, warning = FALSE, message=FALSE}
+# --- PARTE 6: CARREGAR TABELA E MAPA ---
+# Mostrar tabela interativa
+resultado$tabela
+# Mostrar mapa interativo
+resultado$mapa
+```
+
+
