@@ -1,0 +1,110 @@
+---
+title: "Desafio 09"
+author: "Luis Felipe Godoy - RA:277197"
+format: html
+---
+```{r}
+# ----------------------------------------------------------
+# Carregar pacotes necessários
+# ----------------------------------------------------------
+library(DBI)        # Interface com bancos de dados
+library(RSQLite)    # Conexão com SQLite
+library(readr)      # Leitura de arquivos CSV em chunks
+
+# ----------------------------------------------------------
+# Conectar (ou criar) o banco de dados SQLite
+# ----------------------------------------------------------
+con <- dbConnect(RSQLite::SQLite(), "voos.sqlite3")
+
+# ----------------------------------------------------------
+# Ler e gravar airlines.csv e airports.csv
+# ----------------------------------------------------------
+airlines <- read_csv("airlines.csv", col_types = cols())
+airports <- read_csv("airports.csv", col_types = cols())
+
+# Criar as tabelas no banco
+dbWriteTable(con, "airlines", airlines, overwrite = TRUE)
+dbWriteTable(con, "airports", airports, overwrite = TRUE)
+
+# ----------------------------------------------------------
+# Limpar tabela flights antes de começar (evita duplicação)
+# ----------------------------------------------------------
+if ("flights" %in% dbListTables(con)) {
+  dbRemoveTable(con, "flights")
+}
+
+# ----------------------------------------------------------
+# Função callback para ler dados em chunks
+# ----------------------------------------------------------
+lerDados <- function(x, pos) {
+  # Mostrar mensagem de progresso
+  message("Leitura atingiu a linha ", pos)
+  
+  # Filtrar apenas os aeroportos de interesse
+  aeroportos <- c("BWI", "MIA", "SEA", "SFO", "JFK")
+  x_filtrado <- subset(
+    x,
+    ORIGIN_AIRPORT %in% aeroportos | DESTINATION_AIRPORT %in% aeroportos
+  )
+  
+  # Gravar no banco (append = TRUE para não sobrescrever)
+  dbWriteTable(con, "flights", x_filtrado, append = TRUE)
+  
+  invisible(NULL)  # Não retorna nada
+}
+
+# ----------------------------------------------------------
+# Ler flights.csv em chunks de 100 mil linhas
+# ----------------------------------------------------------
+callback <- SideEffectChunkCallback$new(lerDados)
+
+read_csv_chunked(
+  "flights.csv",
+  callback = callback,
+  chunk_size = 100000,
+  col_types = cols(
+    YEAR = col_integer(),
+    MONTH = col_integer(),
+    DAY = col_integer(),
+    AIRLINE = col_character(),
+    FLIGHT_NUMBER = col_integer(),
+    ORIGIN_AIRPORT = col_character(),
+    DESTINATION_AIRPORT = col_character(),
+    ARRIVAL_DELAY = col_double(),
+    .default = col_skip()  # ignora todas as outras colunas
+  )
+)
+
+# ----------------------------------------------------------
+# Consulta SQL pedida no enunciado
+# ----------------------------------------------------------
+query <- "
+SELECT 
+    f.DESTINATION_AIRPORT AS sigla_aeroporto,
+    a.AIRPORT AS nome_aeroporto,
+    l.AIRLINE AS nome_companhia,
+    AVG(f.ARRIVAL_DELAY) AS atraso_medio
+FROM flights f
+JOIN airports a ON f.DESTINATION_AIRPORT = a.IATA_CODE
+JOIN airlines l ON f.AIRLINE = l.IATA_CODE
+GROUP BY f.DESTINATION_AIRPORT, a.AIRPORT, l.AIRLINE
+ORDER BY atraso_medio DESC
+"
+
+resultado <- dbGetQuery(con, query)
+
+# Mostrar resultado no console
+print(head(resultado, 10))
+
+# ----------------------------------------------------------
+# Mostrar data e hora legível da execução do script
+# ----------------------------------------------------------
+cat("Data e hora de compilação:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
+
+# ----------------------------------------------------------
+# Fechar conexão com o banco
+# ----------------------------------------------------------
+dbDisconnect(con)
+
+```
+
