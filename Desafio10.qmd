@@ -1,0 +1,241 @@
+---
+title: "Desafio 10"
+format: html
+author: "Luis Felipe Godoy - RA:277197"
+---
+```{r}
+# Carrega o pacote 'reticulate' para integração do R com Python
+library(reticulate)
+
+# Cria um ambiente virtual Python chamado 'myenv'
+virtualenv_create("myenv")
+
+# Ativa o ambiente virtual criado
+use_virtualenv("myenv")
+
+# Instala os pacotes Python necessários dentro do ambiente virtual
+py_install("polars", envname="myenv")     # Biblioteca para manipulação de DataFrames de alto desempenho
+py_install("fastexcel", envname="myenv")  # Biblioteca para leitura/escrita de arquivos Excel
+py_install("pyarrow", envname="myenv")    # Biblioteca para interoperabilidade de dados colunares (Arrow)
+```
+```{python}
+# Importa os pacotes Python instalados
+import polars as pl
+import pyarrow
+import fastexcel
+```
+
+
+```{python}
+# Lê o arquivo CSV contendo informações de aeroportos
+# Seleciona apenas as colunas IATA_CODE, CITY e STATE
+aeroportos = pl.read_csv("../dados/airports.csv",
+                         columns = ["IATA_CODE", "CITY", "STATE"])
+# Mostra as duas primeiras linhas do DataFrame
+aeroportos.head(2)
+
+```
+
+```{python}
+# Lê a planilha Excel com dados do WDI (World Development Indicators)
+# Seleciona apenas as colunas "Short Name" e "Region"
+wdi = pl.read_excel("../dados/WDIEXCEL.xlsx", sheet_name = "Country", columns = ["Short Name", "Region"])
+# Mostra as duas primeiras linhas do DataFrame
+wdi.head(2)
+
+```
+```{python}
+# Criação de um DataFrame de exemplo com valores numéricos e ausentes (None)
+df = pl.DataFrame({
+    "grupo": ["A", "A", "B", "B", "C"],   # Coluna de grupos
+    "valor1": [10, 15, 10, None, 25],    # Primeira variável com valores ausentes
+    "valor2": [5, None, 20, 30, None]    # Segunda variável com valores ausentes
+})
+df
+
+```
+
+```{python}
+# Seleciona a coluna 'valor1' do DataFrame
+df["valor1"]
+```
+```{python}
+# Calcula a média da coluna 'valor1', considerando os valores ausentes
+df["valor1"].mean()
+```
+```{python}
+# Remove os valores nulos (None) da coluna 'valor1'
+df["valor1"].drop_nulls()
+```
+```{python}
+# Calcula a média da coluna 'valor1' ignorando valores ausentes
+df["valor1"].drop_nulls().mean()
+```
+
+```{python}
+# Seleciona as médias das colunas 'valor1' e 'valor2'
+# Renomeia a média de 'valor1' para 'media_v1'
+df.select([
+  pl.col("valor1").mean().alias("media_v1"),
+  pl.col("valor2").mean()
+])
+```
+```{python}
+# Agrupa os dados pelo 'grupo'
+# Calcula a média de 'valor1' e o valor mínimo de 'valor2' por grupo
+# Ordena os resultados pelo grupo
+df.group_by("grupo").agg([
+  pl.col("valor1").mean().alias("media_valor1"),
+  pl.col("valor2").min().alias("min_valor2")
+]).sort("grupo")
+```
+```{python}
+# Lê o arquivo CSV 'flights.csv' com informações de voos
+# Seleciona apenas as colunas AIRLINE, ARRIVAL_DELAY e DESTINATION_AIRPORT
+# Define os tipos de dados das colunas
+voos = pl.read_csv("flights.csv",
+                   columns = ["AIRLINE", "ARRIVAL_DELAY", "DESTINATION_AIRPORT"],
+                   dtypes = {"AIRLINE": pl.Utf8,
+                             "ARRIVAL_DELAY": pl.Int32,
+                             "DESTINATION_AIRPORT": pl.Utf8})
+voos.shape
+```
+
+```{python}
+# Mostra as três primeiras linhas do DataFrame de voos
+voos.head(3)
+```
+```{python}
+# Cria um DataFrame filtrado com voos das companhias AA e DL
+# Destinos selecionados: SEA, MIA, BWI
+# Remove valores nulos nas colunas críticas
+# Agrupa por companhia aérea e aeroporto de destino
+# Calcula a média de atrasos superiores a 30 minutos (atraso_medio)
+resultado = (
+  voos.drop_nulls(["AIRLINE", "DESTINATION_AIRPORT", "ARRIVAL_DELAY"])
+  .filter(
+    pl.col("AIRLINE").is_in(["AA", "DL"]) &
+    pl.col("DESTINATION_AIRPORT").is_in(["SEA", "MIA", "BWI"])
+    )
+    .group_by(["AIRLINE", "DESTINATION_AIRPORT"])
+    .agg([
+      (pl.col("ARRIVAL_DELAY") > 30).mean().alias("atraso_medio")
+      ])
+)
+```
+```{python}
+# Ordena o resultado pelo atraso médio
+resultado.sort("atraso_medio")
+```
+```{python}
+import polars as pl
+# Criação de DataFrame de clientes
+
+# Criando DataFrames
+clientes = pl.DataFrame({
+    "cliente_id": [1, 2, 3, 4],
+    "nome": ["Ana", "Bruno", "Clara", "Daniel"]
+})
+
+print(clientes)
+```
+```{python}
+# Criação de DataFrame de pedidos com referência aos clientes
+pedidos = pl.DataFrame({
+    "pedido_id": [101, 102, 103, 104, 105],
+    "cliente_id": [1, 2, 3, 1, 5],
+    "valor": [100.50, 250.75, 75.00, 130.00, 79.00]
+})
+
+print(pedidos)
+```
+
+```{python}
+# Realiza join interno (inner join) entre clientes e pedidos
+# Mantém apenas clientes que possuem pedidos
+res_ij = clientes.join(pedidos, on="cliente_id", how="inner")
+print(res_ij)
+```
+```{python}
+# Realiza join à esquerda (left join), mantendo todos os clientes
+# Pedidos inexistentes terão valores nulos
+res_lj = clientes.join(pedidos, on="cliente_id", how="left")
+print(res_lj)
+```
+```{python}
+# Realiza join à direita (right join), mantendo todos os pedidos
+# Clientes inexistentes terão valores nulos
+res_rj = clientes.join(pedidos, on="cliente_id", how="right")
+print(res_rj)
+```
+```{python}
+# Realiza join externo (outer join), mantendo todos clientes e pedidos
+res_oj = clientes.join(pedidos, on="cliente_id", how="outer")
+print(res_oj)
+```
+```{python}
+# Outro exemplo de outer join (igual ao anterior)
+res_cj = clientes.join(pedidos, on="cliente_id", how="outer")
+print(res_cj)
+```
+```{python}
+# Mostra novamente os DataFrames originais
+print(clientes)
+print(pedidos)
+```
+```{python}
+# Agrupa pelo nome e cliente_id e calcula a média de valor dos pedidos
+res = res_ij.group_by(["nome", "cliente_id"]).agg(pl.col("valor").mean())
+print(res)
+```
+
+```{python}
+# Mostra novamente os DataFrames originais
+print(clientes)
+print(pedidos)
+```
+
+```{python}
+# Verifica valores maiores que 100, agrupa por nome e soma os valores True/False
+res = (res_oj.with_columns(pl.col("valor") > 100)
+       .group_by("nome")
+       .agg(pl.col("valor").sum()))
+print(res)
+```
+```{python}
+# Criação de DataFrames de vendas e detalhes de pedidos
+vendas = pl.DataFrame({
+    "id_venda": [1, 2, 3],
+    "id_cl": [1, 2, 1],
+    "id_prod": [101, 102, 103],
+    "qtde": [2, 1, 1]
+})
+
+detalhes_pedidos = pl.DataFrame({
+    "id_ped": [201, 202, 203],
+    "cl_id": [1, 2, 1],
+    "id_prod": [101, 102, 104],
+    "valor": [50.00, 75.00, 100.00]
+})
+```
+
+```{python}
+# Exibe os DataFrames de vendas e detalhes de pedidos
+print(vendas)
+print(detalhes_pedidos)
+```
+```{python}
+# Realiza join entre vendas e detalhes de pedidos usando id_cliente e id_prod
+# Mantém apenas registros correspondentes (inner join)
+final = vendas.join(detalhes_pedidos,
+                    left_on = ["id_cl", "id_prod"],
+                    right_on = ["cl_id", "id_prod"],
+                    how = "inner")
+print(final)
+```
+
+```{r}
+# Exibe data e hora de compilação do relatório
+cat("Data e hora de compilação:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
+```
+
