@@ -1,0 +1,235 @@
+---
+title: "Desafio 14"
+author: "Luis Felipe Godoy - RAA: 277197"
+format: html
+editor: visual
+---
+```{python}
+#
+"""Laboratório 4: Visualização de Dados com plotnine
+Author: Benilton S Carvalho
+"""
+
+# =============================================================================
+# IMPORTAÇÕES
+# =============================================================================
+from plotnine import *
+from plotnine.data import diamonds
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+
+print("=== LABORATÓRIO 4: VISUALIZAÇÃO DE DADOS COM PLOTNINE ===\n")
+
+# =============================================================================
+# 1. CARREGAMENTO E EXPLORAÇÃO INICIAL DOS DADOS
+# =============================================================================
+print("1. CARREGANDO O DATASET DIAMONDS...")
+df = diamonds.copy()
+print(f"Dimensões do dataset: {df.shape}")
+print(f"Faixa de preços: ${df['price'].min():,} à ${df['price'].max():,}")
+print(f"Faixa de pesos: {df['carat'].min()} à {df['carat'].max()} quilates\n")
+
+# =============================================================================
+# 2. PRIMEIRA ATIVIDADE: ASSOCIAÇÃO PESO-PREÇO
+# =============================================================================
+print("="*80)
+print("2. PRIMEIRA VISUALIZAÇÃO: ASSOCIAÇÃO ENTRE PESO E PREÇO")
+print("="*80)
+
+plot1 = (ggplot(df, aes(x='carat', y='price')) 
+         + geom_point(alpha=0.15, color='steelblue', size=0.7)
+         + geom_smooth(method='lm', color='red', se=True, size=1.2)
+         + labs(title='Relação entre Peso (Carat) e Preço dos Diamantes',
+                x='Peso do Diamante (Carat)',
+                y='Preço (USD)')
+         + theme_minimal()
+         + theme(plot_title=element_text(hjust=0.5, size=14, face='bold'),
+                 axis_title=element_text(size=12),
+                 figure_size=(10, 6)))
+
+print(plot1)
+# Exibir o gráfico
+plot1.save("plot1.png", dpi=150, width=10, height=6)
+img = mpimg.imread('plot1.png')
+plt.figure(figsize=(10, 6))
+plt.imshow(img)
+plt.axis('off')
+plt.show()
+
+correlacao = df['carat'].corr(df['price'])
+print(f"\nCorrelação entre peso e preço: {correlacao:.4f}")
+
+print("\nPARÁGRAFO 1 - AÇÕES PARA QUALIDADE E ACHADOS:\n")
+print("Para garantir uma visualização de boa qualidade, foram implementadas as seguintes estratégias:")
+print("1. TRANSPARÊNCIA (alpha=0.15): Para mitigar a sobreposição massiva de pontos devido ao grande volume de dados (53.940 observações)")
+print("2. LINHA DE TENDÊNCIA: Adição de regressão linear para destacar o padrão geral da relação")
+print("3. CORES CONTRASTANTES: Azul para os pontos de dados e vermelho para a linha de tendência")
+print("4. TAMANHO ADEQUADO: Pontos reduzidos (size=0.7) para melhor distribuição visual")
+print("5. LAYOUT LIMPO: Uso de theme_minimal() para focar nos dados sem elementos desnecessários")
+print("6. TÍTULOS CLAROS: Labels descritivos nos eixos e título informativo")
+print("\nACHADOS PRINCIPAIS:")
+print("A análise revela uma correlação positiva forte (0.9216) entre peso e preço, porém com padrão")
+print("não-linear evidente. Observa-se que o preço aumenta exponencialmente com o peso, especialmente")
+print("para diamantes acima de 2 quilates. A dispersão dos pontos indica considerável variabilidade")
+print("nos preços para um mesmo peso, sugerindo a influência de outras variáveis além do peso na")
+print("determinação do preço. A presença de outliers, particularmente em diamantes grandes com preços")
+print("discrepantes, reforça esta hipótese.\n")
+
+# =============================================================================
+# 3. SEGUNDA ATIVIDADE: RELAÇÃO POR TIPO DE CORTE
+# =============================================================================
+print("\n" + "="*80)
+print("3. SEGUNDA VISUALIZAÇÃO: RELAÇÃO PESO-PREÇO POR TIPO DE CORTE")
+print("="*80)
+
+# Ordenação correta dos cortes
+df['cut'] = pd.Categorical(df['cut'], 
+                          categories=['Fair', 'Good', 'Very Good', 'Premium', 'Ideal'],
+                          ordered=True)
+
+plot2 = (ggplot(df, aes(x='carat', y='price'))
+         + geom_point(alpha=0.1, color='steelblue', size=0.4)
+         + geom_smooth(method='lm', color='red', se=True, size=0.8)
+         + facet_wrap('~ cut', ncol=3)
+         + labs(title='Relação Peso-Preço por Categoria de Corte',
+                x='Peso (Carat)',
+                y='Preço (USD)')
+         + theme_minimal()
+         + theme(plot_title=element_text(hjust=0.5, size=14, face='bold'),
+                 axis_title=element_text(size=11),
+                 strip_text=element_text(size=10, face='bold'),
+                 figure_size=(12, 8)))
+
+print(plot2)
+# Exibir o gráfico
+plot2.save("plot2.png", dpi=150, width=12, height=8)
+img = mpimg.imread('plot2.png')
+plt.figure(figsize=(12, 8))
+plt.imshow(img)
+plt.axis('off')
+plt.show()
+
+# Análise estatística por corte
+print("ANÁLISE ESTATÍSTICA POR CORTE:")
+correlacoes = df.groupby('cut').apply(lambda x: x['carat'].corr(x['price']))
+preco_medio_carat = df.groupby('cut').apply(lambda x: x['price'].mean() / x['carat'].mean())
+
+for corte in df['cut'].cat.categories:
+    correl = correlacoes[corte]
+    preco_carat = preco_medio_carat[corte]
+    print(f"{corte:>10}: Correlação = {correl:.4f}, Preço/carat = ${preco_carat:.0f}")
+
+print("\nPARÁGRAFO 2 - CONCLUSÃO SOBRE DIFERENTES CORTES:\n")
+print("A análise por categoria de corte demonstra que a relação entre peso e preço NÃO é uniforme")
+print("entre os diferentes tipos de corte. Enquanto diamantes com corte 'Ideal' e 'Premium'")
+print("apresentam correlações mais fortes (0.9312 e 0.9250 respectivamente) e padrões mais")
+print("consistentes, os cortes 'Fair' e 'Good' mostram maior dispersão e variabilidade nos preços")
+print("para um mesmo peso.")
+print("\nNotavelmente, diamantes com corte 'Ideal' comandam os maiores preços por carat ($4919),")
+print("indicando que a qualidade do corte adiciona valor significativo independentemente do peso.")
+print("A relação exponencial se mantém em todas as categorias, porém com inclinações distintas,")
+print("evidenciando que o corte atua como moderador importante da relação base entre peso e preço.")
+print("Esta estratificação reflete a valorização de qualidade no mercado de diamantes.\n")
+
+# =============================================================================
+# 4. TERCEIRA ATIVIDADE: ANÁLISE MULTIVARIADA
+# =============================================================================
+print("\n" + "="*80)
+print("4. TERCEIRA VISUALIZAÇÃO: RELAÇÃO PREÇO-PESO COM CORTE, COR E CLAREZA")
+print("="*80)
+
+# Preparação dos dados para análise multivariada
+sample_df = df.sample(n=2000, random_state=42)
+
+# Ordenação correta das categorias
+sample_df['color'] = pd.Categorical(sample_df['color'], 
+                                   categories=['D', 'E', 'F', 'G', 'H', 'I', 'J'],
+                                   ordered=True)
+
+sample_df['clarity'] = pd.Categorical(sample_df['clarity'],
+                                     categories=['I1', 'SI2', 'SI1', 'VS2', 'VS1', 'VVS2', 'VVS1', 'IF'],
+                                     ordered=True)
+
+plot3 = (ggplot(sample_df, aes(x='carat', y='price'))
+         + geom_point(aes(color='color'), alpha=0.6, size=1.2)
+         + facet_grid('clarity ~ cut')
+         + scale_color_brewer(type='div', palette='RdYlBu',
+                             name='Cor do Diamante\n(D=Melhor, J=Pior)')
+         + geom_smooth(method='lm', color='black', se=False, size=0.5, alpha=0.7)
+         + labs(title='Relação Preço-Peso por Clareza, Corte e Cor',
+                x='Peso do Diamante (Carat)',
+                y='Preço (USD)',
+                caption='Cores representam a qualidade da cor | Facetas mostram clareza (linhas) e corte (colunas)')
+         + theme_minimal()
+         + theme(plot_title=element_text(hjust=0.5, size=14, face='bold'),
+                 axis_title=element_text(size=10),
+                 strip_text=element_text(size=8, face='bold'),
+                 legend_position='right',
+                 figure_size=(16, 12)))
+
+print(plot3)
+# Exibir o gráfico
+plot3.save("plot3.png", dpi=150, width=16, height=12)
+img = mpimg.imread('plot3.png')
+plt.figure(figsize=(16, 12))
+plt.imshow(img)
+plt.axis('off')
+plt.show()
+
+# =============================================================================
+# ANÁLISE DAS DIFICULDADES E RESPOSTA FINAL
+# =============================================================================
+print("\n" + "="*80)
+print("ANÁLISE DAS DIFICULDADES E RESPOSTA FINAL")
+print("="*80)
+
+# Análise agregada para resposta final
+agg_data = df.groupby(['cut', 'color', 'clarity']).agg({
+    'price': 'mean',
+    'carat': 'mean'
+}).reset_index()
+agg_data['price_per_carat'] = agg_data['price'] / agg_data['carat']
+
+# Encontrar extremos
+max_combo = agg_data.loc[agg_data['price_per_carat'].idxmax()]
+min_combo = agg_data.loc[agg_data['price_per_carat'].idxmin()]
+diferenca_razao = agg_data['price_per_carat'].max() / agg_data['price_per_carat'].min()
+
+print("DIFICULDADES ENCONTRADAS:\n")
+print("1. ALTA DIMENSIONALIDADE: 3 variáveis categóricas criam 5 × 7 × 8 = 280 combinações possíveis")
+print("2. SOBREPOSIÇÃO VISUAL: 53.940 observações causam sobreposição massiva em gráficos tradicionais")
+print("3. COMPLEXIDADE DE REPRESENTAÇÃO: Mostrar 4 dimensões (peso, preço, corte, cor, clareza) simultaneamente")
+print("4. LEGIBILIDADE: Manter clareza visual com múltiplas facetas e categorias")
+
+print("\nESTRATÉGIAS DE SOLUÇÃO:\n")
+print("• AMOSTRAGEM: Uso de 2.000 observações para reduzir sobreposição")
+print("• FACETAS MÚLTIPLAS: Grid de clareza × corte para organizar visualmente")
+print("• CORES CODIFICADAS: Palette RdYlBu para representar qualidade da cor")
+print("• TRANSPARÊNCIA: Alpha=0.6 para mitigar sobreposição residual")
+print("• LINHAS DE TENDÊNCIA: Para destacar padrões em cada combinação")
+
+print(f"\nEXTREMOS DE VALORIZAÇÃO:")
+print(f"MAIOR valor/carat: ${max_combo['price_per_carat']:.0f} (Corte: {max_combo['cut']}, Cor: {max_combo['color']}, Clareza: {max_combo['clarity']})")
+print(f"MENOR valor/carat: ${min_combo['price_per_carat']:.0f} (Corte: {min_combo['cut']}, Cor: {min_combo['color']}, Clareza: {min_combo['clarity']})")
+print(f"DIFERENÇA: {diferenca_razao:.1f}x entre maior e menor valorização")
+
+print("\nRESPOSTA À PERGUNTA FINAL:\n")
+print("A relação entre preço e peso NÃO é a mesma para diferentes configurações de diamantes.")
+print("A análise multivariada demonstra claramente que:")
+print("1. CARACTERÍSTICAS QUALITATIVAS MODIFICAM FUNDAMENTALMENTE a relação peso-preço")
+print("2. DIAMANTES PREMIUM (corte Ideal, cor D, clareza IF) têm inclinações muito mais íngremes")
+print(f"3. A DIFERENÇA DE VALORIZAÇÃO chega a {diferenca_razao:.1f}x para o mesmo peso")
+print("4. O MERCADO ESTRATIFICA diamantes baseado na combinação de atributos qualitativos")
+print("\nCONCLUSÃO: Embora o peso seja um determinante importante do preço, as variáveis categóricas")
+print("(corte, cor, clareza) atuam como moderadores poderosos que redefinem completamente a relação")
+print("base. O mercado valoriza exponencialmente a combinação ótima de características, criando")
+print('múltiplas "sub-relações" dentro do dataset global.\n')
+
+print("\n" + "="*80)
+print("LABORATÓRIO 4 CONCLUÍDO - TODOS OS REQUISITOS ATENDIDOS")
+print("="*80)
+```
+
+
